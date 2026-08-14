@@ -1,0 +1,40 @@
+name: Refresh dashboard
+
+on:
+  schedule:
+    # 05:23 and 17:23 UTC = 07:23 and 19:23 Europe/Rome (summer time).
+    # GitHub queues cron jobs on shared runners, so firing can lag by a few minutes.
+    - cron: "23 5,17 * * *"
+  workflow_dispatch:        # lets you trigger a run by hand from the Actions tab
+
+permissions:
+  contents: write           # the only permission needed: commit the rebuilt page
+
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Rebuild index.html
+        run: python build.py
+
+      - name: Commit if the data changed
+        run: |
+          git config user.name  "market-pulse-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- index.html; then
+            echo "No change in index.html — nothing to commit."
+            exit 0
+          fi
+          git add index.html
+          git commit -m "Automated 12h refresh — $(date -u '+%Y-%m-%d %H:%M UTC')"
+          git push
